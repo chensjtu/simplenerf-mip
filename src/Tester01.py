@@ -46,6 +46,7 @@ class NerfTester:
         checkpoint_state = torch.load(model_path, map_location=self.device)
         iter_num = checkpoint_state['iteration_num']
         self.model.load_state_dict(checkpoint_state['model_state_dict'])
+        self.model.to(self.device)
         self.model.eval()
 
         train_dirname = model_path.parent.parent.parent.stem

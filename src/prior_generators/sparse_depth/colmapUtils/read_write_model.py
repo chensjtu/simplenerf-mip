@@ -221,7 +221,7 @@ def read_images_text(path):
     return images
 
 
-def read_images_binary(path_to_model_file):
+def read_images_binary(path_to_model_file, frame_nums = None):
     """
     see: src/base/reconstruction.cc
         void Reconstruction::ReadImagesBinary(const std::string& path)
@@ -230,7 +230,7 @@ def read_images_binary(path_to_model_file):
     images = {}
     with open(path_to_model_file, "rb") as fid:
         num_reg_images = read_next_bytes(fid, 8, "Q")[0]
-        for _ in range(num_reg_images):
+        for idx in range(num_reg_images):
             binary_image_properties = read_next_bytes(
                 fid, num_bytes=64, format_char_sequence="idddddddi")
             image_id = binary_image_properties[0]
@@ -249,10 +249,11 @@ def read_images_binary(path_to_model_file):
             xys = np.column_stack([tuple(map(float, x_y_id_s[0::3])),
                                    tuple(map(float, x_y_id_s[1::3]))])
             point3D_ids = np.array(tuple(map(int, x_y_id_s[2::3])))
-            images[image_id] = Image(
-                id=image_id, qvec=qvec, tvec=tvec,
-                camera_id=camera_id, name=image_name,
-                xys=xys, point3D_ids=point3D_ids)
+            if frame_nums is None or idx in frame_nums:
+                images[image_id] = Image(
+                    id=image_id, qvec=qvec, tvec=tvec,
+                    camera_id=camera_id, name=image_name,
+                    xys=xys, point3D_ids=point3D_ids)
     return images
 
 
@@ -332,7 +333,7 @@ def read_points3D_text(path):
     return points3D
 
 
-def read_points3d_binary(path_to_model_file):
+def read_points3d_binary(path_to_model_file, selected_ids=None):
     """
     see: src/base/reconstruction.cc
         void Reconstruction::ReadPoints3DBinary(const std::string& path)
@@ -341,7 +342,7 @@ def read_points3d_binary(path_to_model_file):
     points3D = {}
     with open(path_to_model_file, "rb") as fid:
         num_points = read_next_bytes(fid, 8, "Q")[0]
-        for _ in range(num_points):
+        for idx in range(num_points):
             binary_point_line_properties = read_next_bytes(
                 fid, num_bytes=43, format_char_sequence="QdddBBBd")
             point3D_id = binary_point_line_properties[0]
@@ -355,10 +356,11 @@ def read_points3d_binary(path_to_model_file):
                 format_char_sequence="ii"*track_length)
             image_ids = np.array(tuple(map(int, track_elems[0::2])))
             point2D_idxs = np.array(tuple(map(int, track_elems[1::2])))
-            points3D[point3D_id] = Point3D(
-                id=point3D_id, xyz=xyz, rgb=rgb,
-                error=error, image_ids=image_ids,
-                point2D_idxs=point2D_idxs)
+            if selected_ids is None or idx in selected_ids:
+                points3D[point3D_id] = Point3D(
+                    id=point3D_id, xyz=xyz, rgb=rgb,
+                    error=error, image_ids=image_ids,
+                    point2D_idxs=point2D_idxs)
     return points3D
 
 

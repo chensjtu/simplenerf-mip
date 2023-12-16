@@ -818,6 +818,7 @@ class DataPreprocessor(DataPreprocessorParent):
         if preprocess_pose:
             processed_pose = self.preprocess_poses({
                 'poses': pose[None],
+                'bounds': numpy.array(self.model_configs['bounds']),
                 'translation_scale': self.model_configs['translation_scale'],
                 'average_pose': numpy.array(self.model_configs['average_pose']),
             },
@@ -1135,3 +1136,8 @@ class DataPreprocessor(DataPreprocessorParent):
             if key not in tgt_dict:
                 tgt_dict[key] = src_dict[key]
         return
+
+
+    # ------------------------------------ Bug Fix ------------------------------------------- #
+    def normalize(self, x):
+        return x / numpy.linalg.norm(x)

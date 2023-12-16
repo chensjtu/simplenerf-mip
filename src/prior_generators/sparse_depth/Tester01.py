@@ -6,6 +6,7 @@
 import os
 import shutil
 from pathlib import Path
+from typing import List, Optional
 
 import numpy
 import pandas
@@ -144,7 +145,7 @@ class ColmapTester:
         skimage.io.imsave(path.as_posix(), image)
         return
 
-    def load_colmap_data(self):
+    def load_colmap_data(self, points3d_bin_path: Optional[str] = None, selected_ids: Optional[List[int]] = None):
         camdata = read_model.read_cameras_binary((self.sparse_dirpath / 'cameras.bin').as_posix())
     
         list_of_keys = list(camdata.keys())
@@ -174,30 +175,40 @@ class ColmapTester:
         poses = c2w_mats[:, :3, :4].transpose([1,2,0])
         poses = numpy.concatenate([poses, numpy.tile(hwf[..., numpy.newaxis], [1,1,poses.shape[-1]])], 1)
 
-        pts3d = read_model.read_points3d_binary((self.sparse_dirpath / 'points3D.bin'))
-        
+        if points3d_bin_path is None:
+            pts3d = read_model.read_points3d_binary((self.sparse_dirpath / 'points3D.bin'))
+        else:
+            pts3d = read_model.read_points3d_binary(points3d_bin_path, selected_ids)
+
         # must switch to [-u, r, -t] from [r, -u, t], NOT [r, u, -t]
         poses = numpy.concatenate([poses[:, 1:2, :], poses[:, 0:1, :], -poses[:, 2:3, :], poses[:, 3:4, :], poses[:, 4:5, :]], 1)
         
         return poses, pts3d, perm
 
     @staticmethod
-    def get_bounds(poses, pts3d, perm):
+    def get_bounds(poses, pts3d, perm, frame_nums: numpy.ndarray):
         pts_arr = []
         vis_arr = []
+        print('pts3d', len(pts3d))
         for k in pts3d:
             pts_arr.append(pts3d[k].xyz)
             cams = [0] * poses.shape[-1]
             for ind in pts3d[k].image_ids:
-                if len(cams) < ind - 1:
-                    print('ERROR: the correct camera poses for current points cannot be accessed')
-                    return
-                cams[ind-1] = 1
+                # if len(cams) < ind - 1:
+                #     print('ERROR: the correct camera poses for current points cannot be accessed')
+                #     return
+                for frame_num, image_id in enumerate(frame_nums):
+                    if ind == image_id:
+                        cams[frame_num] = 1
             vis_arr.append(cams)
-    
+
+        if len(pts_arr) == 0:
+            return None
+
         pts_arr = numpy.array(pts_arr)
         vis_arr = numpy.array(vis_arr)
         print( 'Points', pts_arr.shape, 'Visibility', vis_arr.shape )
+        # Points (769, 3) Visibility (769, 2)
         
         zvals = numpy.sum(-(pts_arr[:, numpy.newaxis, :].transpose([2,0,1]) - poses[:3, 3:4, :]) * poses[:3, 2:3, :], 0)
         valid_z = zvals[vis_arr==1]
@@ -229,20 +240,25 @@ class ColmapTester:
             poses.append(c2w)
         return numpy.array(poses)
 
-    def compute_colmap_depth(self):
+    def compute_colmap_depth(self, frame_nums: numpy.ndarray, points3d_bin_path: Optional[str] = None, selected_ids: Optional[List[int]] = None):
         if not (self.sparse_dirpath / 'images.bin').exists():
             return None, None
 
         images = read_images_binary((self.sparse_dirpath / 'images.bin').as_posix())
-        points = read_points3d_binary((self.sparse_dirpath / 'points3D.bin').as_posix())
-    
+        if points3d_bin_path is None:
+            points = read_points3d_binary((self.sparse_dirpath / 'points3D.bin').as_posix())
+        else:
+            points = read_points3d_binary(points3d_bin_path, selected_ids)
+
         Errs = numpy.array([point3D.error for point3D in points.values()])
         Err_mean = numpy.mean(Errs)
         print("Mean Projection Error:", Err_mean)
     
         poses = self.get_poses(images)
-        colmap_data = self.load_colmap_data()
-        bds_raw = self.get_bounds(*colmap_data)
+        print('selected_ids', len(selected_ids))
+        colmap_data = self.load_colmap_data(points3d_bin_path, selected_ids)
+        bds_raw = self.get_bounds(*colmap_data, frame_nums=frame_nums)
+        print('bds_raw:', bds_raw)
         if bds_raw is None:
             return None, None
     
@@ -256,6 +272,8 @@ class ColmapTester:
                 point2D = images[id_im].xys[i]
                 id_3D = images[id_im].point3D_ids[i]
                 if id_3D == -1:
+                    continue
+                if id_3D not in points.keys():
                     continue
                 point3D = points[id_3D].xyz
                 depth = (poses[id_im-1,:3,2].T @ (point3D - poses[id_im-1,:3,3]))
@@ -288,9 +306,9 @@ class ColmapTester:
 
         return depth_data_list, bounds_data
     
-    def estimate_sparse_depth(self, images: numpy.ndarray, extrinsics: numpy.ndarray, intrinsics: numpy.ndarray):
+    def estimate_sparse_depth(self, images: numpy.ndarray, extrinsics: numpy.ndarray, intrinsics: numpy.ndarray, frame_nums: numpy.ndarray, points3d_bin_path: Optional[str] = None, selected_ids: Optional[List[int]] = None):
         self.clean_tmp_dir()
         camera_data = self.save_tmp_data(images, intrinsics)
         self.run_colmap(camera_data, extrinsics)
-        depth_data, bounds_data = self.compute_colmap_depth()
+        depth_data, bounds_data = self.compute_colmap_depth(frame_nums=frame_nums, points3d_bin_path=points3d_bin_path, selected_ids=selected_ids)
         return depth_data, bounds_data

@@ -1,4 +1,4 @@
-name: SimpleNeRF
+name: simplenerf
 channels:
   - pytorch
   - nvidia

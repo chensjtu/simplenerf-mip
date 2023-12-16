@@ -487,7 +487,7 @@ def save_model_configs(output_dirpath: Path, configs: dict, filename: Optional[s
 
 def start_training(configs: dict):
     root_dirpath = Path('../')
-    database_dirpath = root_dirpath / 'data/' / configs['database_dirpath']
+    database_dirpath = root_dirpath / configs['database_dirpath']
     output_dirpath = root_dirpath / f'runs/training/train{configs["train_num"]:04}'
     
     scene_ids = configs['data_loader']['scene_ids']

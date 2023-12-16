@@ -5,6 +5,7 @@
 
 import datetime
 import json
+import os
 import time
 import traceback
 from pathlib import Path
@@ -16,7 +17,7 @@ import skimage.io
 from deepdiff import DeepDiff
 from tqdm import tqdm
 
-import Tester01 as Tester
+import Tester02 as Tester
 
 this_filepath = Path(__file__)
 this_filename = this_filepath.stem
@@ -44,7 +45,7 @@ def save_configs(output_dirpath: Path, configs: dict):
 
 def start_generation(gen_configs: dict):
     root_dirpath = Path('../../../')
-    database_dirpath = root_dirpath / 'data/databases' / gen_configs['database_dirpath']
+    database_dirpath = root_dirpath / 'sparse_nerf_datasets/mip360_v2_vip_style'
     tmp_dirpath = root_dirpath / 'tmp'
 
     output_dirpath = database_dirpath / f"all/estimated_depths/DE{gen_configs['gen_num']:02}"
@@ -56,13 +57,12 @@ def start_generation(gen_configs: dict):
     video_data = pandas.read_csv(video_datapath)
     scene_names = numpy.unique(video_data['scene_name'].to_numpy())
 
-    tester = Tester.ColmapTester(tmp_dirpath)
     res_suffix = gen_configs['resolution_suffix']
 
     for scene_name in tqdm(scene_names):
         bounds_path = output_dirpath / f'{scene_name}/EstimatedBounds.csv'
-        # if bounds_path.exists():
-        #     continue
+        if bounds_path.exists():
+            continue
 
         frame_nums = video_data.loc[video_data['scene_name'] == scene_name]['pred_frame_num'].to_numpy()
         print('frame_nums:', frame_nums)
@@ -73,10 +73,12 @@ def start_generation(gen_configs: dict):
         intrinsics = numpy.loadtxt(intrinsics_path.as_posix(), delimiter=',').reshape((-1, 3, 3))[frame_nums]
         extrinsics = numpy.loadtxt(extrinsics_path.as_posix(), delimiter=',').reshape((-1, 4, 4))[frame_nums]
 
-        depth_data_list, bounds_data = tester.estimate_sparse_depth(frames, extrinsics, intrinsics)
-        print('debug')
-        print(depth_data_list)
-        exit(0)
+        with open((database_dirpath / f'all/database_data/{scene_name}/bp_pick/bp_pick_5.txt'), 'r') as f:
+            selected_ids = [int(id) for id in f.readlines()]
+
+        tester = Tester.ColmapTester(database_dirpath / f'all/database_data/{scene_name}', selected_ids, frame_nums)
+        depth_data_list, bounds_data = tester.estimate_sparse_depth()
+        print('depth data:', depth_data_list)
         if depth_data_list is None:
             continue
 
@@ -88,46 +90,22 @@ def start_generation(gen_configs: dict):
     return
 
 
-def demo1():
-    """
-    For a gen set
-    :return:
-    """
+def main():
+    gen_configs = {
+        'generator': this_filename,
+        'gen_num': 1,
+        'gen_set_num': 1,
+        'resolution_suffix': '_down4',
+    }
+    start_generation(gen_configs)
+
     gen_configs = {
         'generator': this_filename,
         'gen_num': 2,
         'gen_set_num': 2,
-        'database_name': 'NeRF_LLFF',
-        'database_dirpath': 'NeRF_LLFF/data',
         'resolution_suffix': '_down4',
     }
     start_generation(gen_configs)
-
-    gen_configs = {
-        'generator': this_filename,
-        'gen_num': 3,
-        'gen_set_num': 3,
-        'database_name': 'NeRF_LLFF',
-        'database_dirpath': 'NeRF_LLFF/data',
-        'resolution_suffix': '_down4',
-    }
-    start_generation(gen_configs)
-
-    gen_configs = {
-        'generator': this_filename,
-        'gen_num': 4,
-        'gen_set_num': 4,
-        'database_name': 'NeRF_LLFF',
-        'database_dirpath': 'NeRF_LLFF/data',
-        'resolution_suffix': '_down4',
-    }
-    start_generation(gen_configs)
-    return
-
-
-def main():
-    demo1()
-    return
 
 
 if __name__ == '__main__':
